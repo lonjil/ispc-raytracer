@@ -50,11 +50,23 @@ pub const Bitmap = struct {
     width: u32,
     height: u32,
     stride: u32,
+    pixel_rows: u32,
+    x_offset: u32,
+    y_offset: u32,
     direction: Direction,
     const Direction = enum { TopDown, BottomUp };
     pub fn create(allocator: *Allocator, width: u32, height: u32, direction: Direction) !@This() {
         const pixels = try allocator.alloc(Pixel, width * height);
-        return @This(){ .pixels = pixels, .width = width, .height = height, .stride = width, .direction = direction };
+        return @This(){
+            .pixels = pixels,
+            .width = width,
+            .height = height,
+            .pixel_rows = height,
+            .stride = width,
+            .direction = direction,
+            .x_offset = 0,
+            .y_offset = 0,
+        };
     }
 
     const Row = struct { row: u32, pixels: []Pixel };
@@ -63,15 +75,21 @@ pub const Bitmap = struct {
         current: u32 = 0,
         pixels: []Pixel,
         height: u32,
-        stride: u32,
         width: u32,
+        stride: u32,
+        pixel_rows: u32,
+        x_offset: u32,
+        y_offset: u32,
         pub fn next(self: *@This()) ?Row {
             if (self.current == self.height) {
                 return null;
             } else {
+                const whole_bitmap_row_start_index = (self.current + self.y_offset) * self.stride;
+                const sub_bitmap_row_start_index = whole_bitmap_row_start_index + self.x_offset;
+                const sub_bitmap_row_end_index = sub_bitmap_row_start_index + self.width;
                 const row = .{
                     .row = self.current,
-                    .pixels = self.pixels[self.current * self.stride .. self.current * (self.stride) + self.width],
+                    .pixels = self.pixels[sub_bitmap_row_start_index..sub_bitmap_row_end_index],
                 };
                 self.current += 1;
                 return row;
@@ -84,7 +102,10 @@ pub const Bitmap = struct {
             .pixels = self.pixels,
             .height = self.height,
             .stride = self.stride,
+            .pixel_rows = self.pixel_rows,
             .width = self.width,
+            .x_offset = self.x_offset,
+            .y_offset = self.y_offset,
         };
     }
 
@@ -364,11 +385,13 @@ fn messageThread(input_info: MessageThreadInputInfo) !void {
         input_info.message_window_ready.set();
         return err;
     };
+
     defer allocator.free(canon_name);
     const fake_name = std.mem.concat(allocator, u8, &[_][]const u8{ input_info.instance_name, "messagewindow" }) catch |err| {
         input_info.message_window_ready.set();
         return err;
     };
+
     defer allocator.free(fake_name);
     const message_windowclass_name = std.unicode.utf8ToUtf16LeWithNull(allocator, fake_name) catch |err| {
         input_info.message_window_ready.set();
@@ -598,25 +621,17 @@ pub const Instance = struct {
                     .BottomUp => @as(i32, 1),
                 },
             };
-            // NOTE: in theory this thinks that stuff off the end of
-            // an allocation is part of the bitmap? I dunno if windows
-            // touches those bits though so we're leaving it like
-            // this. This seems like the type of thing windows would
-            // let you get away with
+
             if (StretchDIBits(
                 self.hdc,
                 @intCast(c_int, dest_x),
                 @intCast(c_int, dest_y),
                 @intCast(c_int, bitmap.width),
                 @intCast(c_int, bitmap.height),
-                0,
-                0,
+                @intCast(c_int, bitmap.x_offset),
+                @intCast(c_int, bitmap.y_offset),
                 @intCast(c_int, bitmap.width),
                 @intCast(c_int, bitmap.height),
-                bitmap.pixels.ptr,
-                @ptrCast(*const BITMAPINFO, &bitmapinfo),
-                0,
-                0x00CC0020,
             ) == 0 and bitmap.height != 0) {
                 return error.BlitError;
             }
