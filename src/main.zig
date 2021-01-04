@@ -7,13 +7,13 @@ pub fn main() void {
     defer _ = gpa.deinit();
     const allocator = &gpa.allocator;
     var daedelus_instance = daedelus.Instance.init(allocator, "ispc_raytracer") catch |err| {
-        daedelus.FatalErrorMessage(allocator, "Couldn't create instance", "Fatal error");
+        daedelus.fatalErrorMessage(allocator, "Couldn't create instance", "Fatal error");
         return;
     };
     defer daedelus_instance.deinit();
 
     const window = daedelus_instance.createWindow("ispc-raytracer", 1280, 720, null, null) catch {
-        daedelus.FatalErrorMessage(allocator, "Couldn't create window", "Fatal error");
+        daedelus.fatalErrorMessage(allocator, "Couldn't create window", "Fatal error");
         return;
     };
     defer window.deinit();
@@ -50,7 +50,7 @@ pub fn main() void {
                 };
             },
             .WindowResize => {
-                daedelus.FatalErrorMessage(allocator, "How did this resize?", "Fatal error");
+                daedelus.fatalErrorMessage(allocator, "How did this resize?", "Fatal error");
                 return;
             },
         }

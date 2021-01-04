@@ -3,7 +3,7 @@ const Allocator = std.mem.Allocator;
 
 const windows = std.os.windows;
 
-pub const WNDPROC = fn (windows.HWND, windows.UINT, windows.WPARAM, windows.LPARAM) callconv(windows.WINAPI) windows.LRESULT;
+const WNDPROC = fn (windows.HWND, windows.UINT, windows.WPARAM, windows.LPARAM) callconv(windows.WINAPI) windows.LRESULT;
 
 const RECT = extern struct { left: i32, top: i32, right: i32, bottom: i32 };
 
@@ -146,7 +146,7 @@ const PAINTSTRUCT = extern struct {
     rgbReserved: [32]BYTE,
 };
 
-pub extern "user32" fn DispatchMessageW(lpMsg: *const MSG) callconv(WINAPI) LRESULT;
+extern "user32" fn DispatchMessageW(lpMsg: *const MSG) callconv(WINAPI) LRESULT;
 
 const WNDCLASSEXW = extern struct {
     cbSize: UINT = @sizeOf(@This()),
@@ -172,15 +172,15 @@ extern "user32" fn PostMessageW(
     lParam: LPARAM,
 ) callconv(WINAPI) BOOL;
 
-pub const MSG = user32.MSG;
+const MSG = user32.MSG;
 
 const ATOM = c_ushort;
 
-pub const CS_OWNDC = 0x0020;
+const CS_OWNDC = 0x0020;
 
 extern "user32" fn RegisterClassExW(arg1: *const WNDCLASSEXW) callconv(WINAPI) ATOM;
 extern "user32" fn UnregisterClassW(lpClassName: LPCWSTR, hInstance: HINSTANCE) callconv(WINAPI) BOOL;
-pub extern "user32" fn CreateWindowExW(
+extern "user32" fn CreateWindowExW(
     dwExStyle: DWORD,
     lpClassName: LPCWSTR,
     lpWindowName: LPCWSTR,
@@ -502,12 +502,12 @@ pub const Instance = struct {
             mutex: std.Mutex = .{},
             width: u32,
             height: u32,
-            pub fn get(self: *@This()) Dim {
+            fn get(self: *@This()) Dim {
                 const lock = self.mutex.acquire();
                 defer lock.release();
                 return .{ .width = self.width, .height = self.height };
             }
-            pub fn set(self: *@This(), width: u32, height: u32) void {
+            fn set(self: *@This(), width: u32, height: u32) void {
                 const lock = self.mutex.acquire();
                 defer lock.release();
                 self.width = width;
@@ -726,7 +726,7 @@ extern "user32" fn MessageBoxW(
 
 const MB_ICONEXCLAMATION = 0x00000030;
 
-pub fn FatalErrorMessage(allocator: *Allocator, error_str: []const u8, title: []const u8) void {
+pub fn fatalErrorMessage(allocator: *Allocator, error_str: []const u8, title: []const u8) void {
     const error_str_u16 = std.unicode.utf8ToUtf16LeWithNull(allocator, error_str) catch |_| return;
     defer allocator.free(error_str_u16);
     const title_u16 = std.unicode.utf8ToUtf16LeWithNull(allocator, title) catch |_| return;
