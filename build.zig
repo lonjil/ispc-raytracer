@@ -1,6 +1,7 @@
 const std = @import("std");
 const Builder = std.build.Builder;
 const path = std.fs.path;
+const builtin = @import("builtin");
 
 fn addIspcObject(b: *Builder, exe: anytype, in_file: []const u8, target: ?[]const u8, is_release: bool) !void {
     // TODO: dependency management. Automatically pick target TODO:
@@ -40,12 +41,25 @@ pub fn build(b: *Builder) !void {
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
     const mode = b.standardReleaseOptions();
 
+
+
     const exe = b.addExecutable("ispc-raytracer", "src/main.zig");
     exe.setTarget(target);
     exe.setBuildMode(mode);
-    exe.subsystem = .Windows;
     try addIspcObject(b, exe, "src/raytrace.ispc", null, b.is_release);
+    const target2 =
+        if (target.os_tag) |tag|
+            tag
+        else
+            builtin.os.tag;
+    if (target2 == .windows) {
+        exe.subsystem = .Windows;
+    } else {
+        exe.linkSystemLibrary("c");
+        exe.linkSystemLibrary("SDL2");
+    }
     exe.install();
+
 
     const run_cmd = exe.run();
     run_cmd.step.dependOn(b.getInstallStep());

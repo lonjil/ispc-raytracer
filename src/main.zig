@@ -44,19 +44,22 @@ pub fn main() void {
     var running = true;
 
     while (running) {
-        switch (window.getEvent()) {
-            .CloseRequest => |_| {
-                running = false;
-            },
-            .RedrawRequest => |redraw_request| {
-                window.blit(bitmap, 0, 0) catch {
-                    unreachable;
-                };
-            },
-            .WindowResize => {
-                daedelus.fatalErrorMessage(allocator, "How did this resize?", "Fatal error");
-                return;
-            },
+        daedelus_instance.pump();
+        if (window.pollEvent()) |ev| {
+            switch (ev) {
+                .CloseRequest => |_| {
+                    running = false;
+                },
+                .RedrawRequest => |redraw_request| {
+                    window.blit(bitmap, 0, 0) catch {
+                        unreachable;
+                    };
+                },
+                .WindowResize => {
+                    daedelus.fatalErrorMessage(allocator, "How did this resize?", "Fatal error");
+                    return;
+                },
+            }
         }
     }
 }
