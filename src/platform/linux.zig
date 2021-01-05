@@ -2,7 +2,6 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const sdl = @cImport(@cInclude("SDL2/SDL.h"));
 
-
 pub const Pixel = extern union {
     bits: u32,
     array: [4]u8,
@@ -12,6 +11,10 @@ pub const Pixel = extern union {
         r: u8,
         a: u8,
     },
+};
+
+const WindowCreateFlags = struct {
+    resizable: bool,
 };
 
 pub const Bitmap = struct {
@@ -63,13 +66,19 @@ pub const Bitmap = struct {
     }
 };
 
-extern fn SDL_GetErrorMsg(buffer: [*c]u8, len: c_int) [*c]u8;
-
 fn getSdlError() [*c]u8 {
     const @"im a static :)" = struct {
         threadlocal var buffer: [1024]u8 = undefined;
+        var lock: std.Mutex = .{};
     };
-    _ = SDL_GetErrorMsg(&@"im a static :)".buffer,1024);
+    if (@hasDecl(sdl, "SDL_GetErrorMsg")) {
+        _ = sdl.SDL_GetErrorMsg(&@"im a static :)".buffer, 1024);
+    } else {
+        var held = @"im a static :)".lock.acquire();
+        const cstr = sdl.SDL_GetError();
+        @memcpy(&@"im a static :)".buffer, cstr, 1024);
+        held.release();
+    }
     return &@"im a static :)".buffer;
 }
 
@@ -89,11 +98,11 @@ pub const Instance = struct {
         }
 
         return @This(){
-                .instance_name = instance_name,
-                .allocator = allocator,
-                .thread = std.Thread.getCurrentId(),
-                .windows = std.ArrayList(*Window).init(allocator),
-            };
+            .instance_name = instance_name,
+            .allocator = allocator,
+            .thread = std.Thread.getCurrentId(),
+            .windows = std.ArrayList(*Window).init(allocator),
+        };
     }
     pub fn pump(self: *@This()) void {
         // todo: whenever the event queue is empty, move SDL events to it.
@@ -104,7 +113,7 @@ pub const Instance = struct {
         while (true) {
             const stored = sdl.SDL_PeepEvents(&evs, 10, .SDL_GETEVENT, sdl.SDL_FIRSTEVENT, sdl.SDL_LASTEVENT);
             if (stored < 0) {
-                std.log.err("Event peep error {}: {}", .{stored, getSdlError()});
+                std.log.err("Event peep error {}: {}", .{ stored, getSdlError() });
                 return;
             } else if (stored == 0) {
                 return;
@@ -119,13 +128,22 @@ pub const Instance = struct {
         }
     }
 
-    pub fn createWindow(self: *@This(), title: []const u8, width: i32, height: i32, x: ?i32, y: ?i32) !*Window {
+    pub fn createWindow(
+        self: *@This(),
+        title: []const u8,
+        width: i32,
+        height: i32,
+        x: ?i32,
+        y: ?i32,
+        create_flags: WindowCreateFlags,
+    ) !*Window {
         const allocator = self.allocator;
         var win = try allocator.create(Window);
         errdefer allocator.destroy(win);
         win.title = try std.cstr.addNullByte(allocator, title);
         errdefer allocator.destroy(win.title);
-        if (sdl.SDL_CreateWindow(win.title,
+        if (sdl.SDL_CreateWindow(
+            win.title,
             x orelse sdl.SDL_WINDOWPOS_UNDEFINED,
             y orelse sdl.SDL_WINDOWPOS_UNDEFINED,
             width,
@@ -140,8 +158,8 @@ pub const Instance = struct {
         var w: c_int = undefined;
         var h: c_int = undefined;
         sdl.SDL_GetWindowSize(win.win, &w, &h);
-        win._size.height = @intCast(u32,h);
-        win._size.width = @intCast(u32,w);
+        win._size.height = @intCast(u32, h);
+        win._size.width = @intCast(u32, w);
         win.event_queue = std.atomic.Queue(Window.Event).init();
         win.id = sdl.SDL_GetWindowID(win.win);
         if (win.id == 0) {
@@ -196,7 +214,7 @@ const Window = struct {
     };
 
     const EventQueue = std.atomic.Queue(Event);
-    pub fn deinit(self: *@This()) void {
+    pub fn close(self: *@This()) void {
         _ = sdl.SDL_DestroyWindow(self.win);
         const allocator = self.allocator;
         allocator.destroy(self);
@@ -210,8 +228,6 @@ const Window = struct {
             old_height: u32,
         }
     };
-
-    
 
     fn addEvent(self: *@This(), event: Event) !void {
         const node = try self.allocator.create(Window.EventQueue.Node);
@@ -267,9 +283,7 @@ const Window = struct {
         bitmap: Bitmap,
         dest_x: u32,
         dest_y: u32,
-    ) error{BlitError}!void {
-        
-    }
+    ) error{BlitError}!void {}
 };
 
 pub fn log(

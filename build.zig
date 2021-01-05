@@ -41,17 +41,15 @@ pub fn build(b: *Builder) !void {
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
     const mode = b.standardReleaseOptions();
 
-
-
     const exe = b.addExecutable("ispc-raytracer", "src/main.zig");
     exe.setTarget(target);
     exe.setBuildMode(mode);
     try addIspcObject(b, exe, "src/raytrace.ispc", null, b.is_release);
     const target2 =
         if (target.os_tag) |tag|
-            tag
-        else
-            builtin.os.tag;
+        tag
+    else
+        builtin.os.tag;
     if (target2 == .windows) {
         exe.subsystem = .Windows;
     } else {
@@ -59,7 +57,6 @@ pub fn build(b: *Builder) !void {
         exe.linkSystemLibrary("SDL2");
     }
     exe.install();
-
 
     const run_cmd = exe.run();
     run_cmd.step.dependOn(b.getInstallStep());

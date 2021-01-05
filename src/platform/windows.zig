@@ -540,6 +540,7 @@ pub const Instance = struct {
             return error.InstanceCreationFailed;
         }
     }
+    fn pump() void {}
 
     const Window = struct {
         allocator: *Allocator,
