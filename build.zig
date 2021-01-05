@@ -23,6 +23,7 @@ fn addIspcObject(b: *Builder, exe: anytype, in_file: []const u8, target: ?[]cons
         out_file,
         "--addressing=64",
         target_param,
+        if (is_release) "-O3" else "-O0",
     });
     exe.step.dependOn(&run_cmd.step);
     exe.addObjectFile(out_file);
