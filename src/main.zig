@@ -2,6 +2,12 @@ const std = @import("std");
 
 const daedelus = @import("platform.zig");
 
+extern fn raytrace_ispc(u32, u32, [*]daedelus.Pixel) void;
+
+fn renderToBitmap(bitmap: daedelus.Bitmap) !void {
+    raytrace_ispc(bitmap.width, bitmap.height, bitmap.pixels.ptr);
+}
+
 pub fn main() void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -12,33 +18,31 @@ pub fn main() void {
     };
     defer daedelus_instance.deinit();
 
-    const window = daedelus_instance.createWindow("ispc-raytracer", 1280, 720, null, null) catch {
+    const window = daedelus_instance.createWindow(
+        "ispc-raytracer",
+        1280,
+        720,
+        null,
+        null,
+        .{ .resizable = false },
+    ) catch {
         daedelus.fatalErrorMessage(allocator, "Couldn't create window", "Fatal error");
         return;
     };
-    defer window.deinit();
+    defer window.close();
 
     const window_dim = window.getSize();
     window.show(); // TODO: show loading screen of some kind?
 
     var bitmap = daedelus.Bitmap.create(allocator, window_dim.width, window_dim.height, .TopDown) catch unreachable;
-    var row_iterator = bitmap.rowIterator();
-    while (row_iterator.next()) |row| {
-        for (row.pixels) |*pixel, i| {
-            pixel.* = .{
-                .comp = .{
-                    .r = @truncate(u8, row.row),
-                    .g = @truncate(u8, i),
-                    .b = 255,
-                    .a = 255,
-                },
-            };
-        }
-    }
+    renderToBitmap(bitmap) catch {
+        daedelus.fatalErrorMessage(allocator, "rendering failed", "rendering error");
+    };
 
     defer bitmap.release(allocator);
 
     var running = true;
+
     while (running) {
         switch (window.getEvent()) {
             .CloseRequest => |_| {

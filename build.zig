@@ -1,6 +1,34 @@
-const Builder = @import("std").build.Builder;
+const std = @import("std");
+const Builder = std.build.Builder;
+const path = std.fs.path;
 
-pub fn build(b: *Builder) void {
+fn addIspcObject(b: *Builder, exe: anytype, in_file: []const u8, target: ?[]const u8, is_release: bool) !void {
+    // TODO: dependency management. Automatically pick target TODO:
+    // get cpuid to tell us what target to use instead of just picking
+    // our lowest common denominator of SSE2
+    const target_param = try std.mem.concat(b.allocator, u8, &[_][]const u8{
+        "--target=",
+        target orelse "sse2-i32x4",
+    });
+    const out_file_obj_name = try std.mem.concat(b.allocator, u8, &[_][]const u8{ std.fs.path.basename(in_file), ".obj" });
+    const out_file = try std.fs.path.join(b.allocator, &[_][]const u8{
+        b.build_root,
+        b.cache_root,
+        out_file_obj_name,
+    });
+    const run_cmd = b.addSystemCommand(&[_][]const u8{
+        "ispc",
+        in_file,
+        "-o",
+        out_file,
+        "--addressing=64",
+        target_param,
+    });
+    exe.step.dependOn(&run_cmd.step);
+    exe.addObjectFile(out_file);
+}
+
+pub fn build(b: *Builder) !void {
     // Standard target options allows the person running `zig build` to choose
     // what target to build for. Here we do not override the defaults, which
     // means any target is allowed, and the default is native. Other options
@@ -15,6 +43,7 @@ pub fn build(b: *Builder) void {
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.subsystem = .Windows;
+    try addIspcObject(b, exe, "src/raytrace.ispc", null, b.is_release);
     exe.install();
 
     const run_cmd = exe.run();

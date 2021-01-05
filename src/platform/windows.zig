@@ -5,6 +5,13 @@ const windows = std.os.windows;
 
 const WNDPROC = fn (windows.HWND, windows.UINT, windows.WPARAM, windows.LPARAM) callconv(windows.WINAPI) windows.LRESULT;
 
+extern "user32" fn MessageBoxW(
+    hWnd: ?HWND,
+    lpText: LPCWSTR,
+    lpCaption: LPCWSTR,
+    uType: UINT,
+) callconv(WINAPI) c_int;
+
 const RECT = extern struct { left: i32, top: i32, right: i32, bottom: i32 };
 
 extern "user32" fn AdjustWindowRectEx(lpRect: *RECT, dwStyle: windows.DWORD, bMenu: windows.BOOL, dwExStyle: windows.DWORD) callconv(windows.WINAPI) windows.BOOL;
@@ -16,6 +23,9 @@ extern "kernel32" fn OutputDebugStringW(lpOutputString: windows.LPCWSTR) callcon
 extern "user32" fn DestroyWindow(hWnd: windows.HWND) callconv(windows.WINAPI) windows.BOOL;
 
 extern "user32" fn GetClientRect(hWnd: windows.HWND, lpRect: *RECT) callconv(windows.WINAPI) windows.BOOL;
+extern "user32" fn ValidateRect(hWnd: HWND, lpRect: *const RECT) callconv(WINAPI) BOOL;
+extern "user32" fn BeginPaint(hWnd: HWND, lpPaint: *PAINTSTRUCT) callconv(WINAPI) HDC;
+extern "user32" fn EndPaint(hWnd: HWND, lpPaint: *PAINTSTRUCT) callconv(WINAPI) BOOL;
 
 extern "gdi32" fn StretchDIBits(
     hdc: HDC,
@@ -44,6 +54,121 @@ pub const Pixel = extern union {
     },
 };
 usingnamespace windows;
+
+const BITMAPINFOHEADER = extern struct {
+    biSize: DWORD = @sizeOf(@This()),
+    biWidth: LONG,
+    biHeight: LONG,
+    biPlanes: WORD = 1,
+    biBitCount: WORD = 32,
+    biCompression: DWORD = 0,
+    biSizeImage: DWORD = 0,
+    biXPelsPerMeter: LONG = 0,
+    biYPelsPerMeter: LONG = 0,
+    biClrUsed: DWORD = 0,
+    biClrImportant: DWORD = 0,
+};
+
+const RGBQUAD = extern struct {
+    rgbBlue: BYTE,
+    rgbGreen: BYTE,
+    rgbRed: BYTE,
+    rgbReserved: BYTE,
+};
+
+const BITMAPINFO = extern struct {
+    bmiHeader: BITMAPINFOHEADER,
+    bmiColors: [1]RGBQUAD,
+};
+
+extern "user32" fn GetMessageW(
+    lpmsg: *MSG,
+    hwnd: ?HWND,
+    wMsgFilterMin: UINT,
+    wMsgFilterMax: UINT,
+) callconv(WINAPI) BOOL;
+
+const PAINTSTRUCT = extern struct {
+    hdc: HDC,
+    fErase: BOOL,
+    rcPaint: RECT,
+    fRestore: BOOL,
+    fIncUpdate: BOOL,
+    rgbReserved: [32]BYTE,
+};
+
+extern "user32" fn DispatchMessageW(lpMsg: *const MSG) callconv(WINAPI) LRESULT;
+
+const WNDCLASSEXW = extern struct {
+    cbSize: UINT = @sizeOf(@This()),
+    style: UINT,
+    lpfnWndProc: WNDPROC,
+    cbClsExtra: c_int,
+    cbWndExtra: c_int,
+    hInstance: HINSTANCE,
+    hIcon: ?HICON,
+    hCursor: ?HCURSOR,
+    hbrBackground: ?HBRUSH,
+    lpszMenuName: ?LPCWSTR,
+    lpszClassName: LPCWSTR,
+    hIconSm: ?HICON,
+};
+
+const CW_USEDEFAULT = @bitCast(i32, @as(u32, 0x80000000));
+
+extern "user32" fn PostMessageW(
+    hWnd: HWND,
+    Msg: UINT,
+    wParam: WPARAM,
+    lParam: LPARAM,
+) callconv(WINAPI) BOOL;
+
+const MSG = user32.MSG;
+
+const ATOM = c_ushort;
+
+const CS_OWNDC = 0x0020;
+
+extern "user32" fn RegisterClassExW(arg1: *const WNDCLASSEXW) callconv(WINAPI) ATOM;
+extern "user32" fn UnregisterClassW(lpClassName: LPCWSTR, hInstance: HINSTANCE) callconv(WINAPI) BOOL;
+extern "user32" fn CreateWindowExW(
+    dwExStyle: DWORD,
+    lpClassName: LPCWSTR,
+    lpWindowName: LPCWSTR,
+    dwStyle: DWORD,
+    X: i32,
+    Y: i32,
+    nWidth: i32,
+    nHeight: i32,
+    hWindParent: ?HWND,
+    hMenu: ?HMENU,
+    hInstance: HINSTANCE,
+    lpParam: ?LPVOID,
+) callconv(WINAPI) ?HWND;
+
+extern "user32" fn SetWindowLongPtrW(hWnd: HWND, nIndex: c_int, dwNewLong: LONG_PTR) callconv(WINAPI) LONG_PTR;
+extern "user32" fn GetWindowLongPtrW(hWnd: HWND, nIndex: c_int) callconv(WINAPI) LONG_PTR;
+
+const WS_OVERLAPPED = 0;
+const WS_CAPTION = 0x00C00000;
+const WS_SYSMENU = 0x00080000;
+const WS_THICKFRAME = 0x00040000;
+const WS_VISIBLE = 0x10000000;
+
+const WindowCreatePipe = struct {
+    out_win: ?*Instance.Window = null,
+    in_name: []const u8,
+    in_width: i32,
+    in_height: i32,
+    in_x: ?i32,
+    in_y: ?i32,
+    in_flags: WindowCreateFlags,
+    reset_event: std.ResetEvent,
+};
+
+const WindowCreateFlags = struct {
+    resizable: bool,
+};
 
 pub const Bitmap = struct {
     pixels: []Pixel,
@@ -115,115 +240,6 @@ pub const Bitmap = struct {
     }
 };
 
-const BITMAPINFOHEADER = extern struct {
-    biSize: DWORD = @sizeOf(@This()),
-    biWidth: LONG,
-    biHeight: LONG,
-    biPlanes: WORD = 1,
-    biBitCount: WORD = 32,
-    biCompression: DWORD = 0,
-    biSizeImage: DWORD = 0,
-    biXPelsPerMeter: LONG = 0,
-    biYPelsPerMeter: LONG = 0,
-    biClrUsed: DWORD = 0,
-    biClrImportant: DWORD = 0,
-};
-
-const RGBQUAD = extern struct {
-    rgbBlue: BYTE,
-    rgbGreen: BYTE,
-    rgbRed: BYTE,
-    rgbReserved: BYTE,
-};
-
-const BITMAPINFO = extern struct {
-    bmiHeader: BITMAPINFOHEADER,
-    bmiColors: [1]RGBQUAD,
-};
-
-extern "user32" fn GetMessageW(
-    lpmsg: *MSG,
-    hwnd: ?HWND,
-    wMsgFilterMin: UINT,
-    wMsgFilterMax: UINT,
-) callconv(WINAPI) BOOL;
-
-const WindowCreatePipe = struct {
-    out_win: ?*Instance.Window = null,
-    in_name: []const u8,
-    in_width: i32,
-    in_height: i32,
-    in_x: ?i32,
-    in_y: ?i32,
-    reset_event: std.ResetEvent,
-};
-
-const PAINTSTRUCT = extern struct {
-    hdc: HDC,
-    fErase: BOOL,
-    rcPaint: RECT,
-    fRestore: BOOL,
-    fIncUpdate: BOOL,
-    rgbReserved: [32]BYTE,
-};
-
-extern "user32" fn DispatchMessageW(lpMsg: *const MSG) callconv(WINAPI) LRESULT;
-
-const WNDCLASSEXW = extern struct {
-    cbSize: UINT = @sizeOf(@This()),
-    style: UINT,
-    lpfnWndProc: WNDPROC,
-    cbClsExtra: c_int,
-    cbWndExtra: c_int,
-    hInstance: HINSTANCE,
-    hIcon: ?HICON,
-    hCursor: ?HCURSOR,
-    hbrBackground: ?HBRUSH,
-    lpszMenuName: ?LPCWSTR,
-    lpszClassName: LPCWSTR,
-    hIconSm: ?HICON,
-};
-
-const CW_USEDEFAULT = @bitCast(i32, @as(u32, 0x80000000));
-
-extern "user32" fn PostMessageW(
-    hWnd: HWND,
-    Msg: UINT,
-    wParam: WPARAM,
-    lParam: LPARAM,
-) callconv(WINAPI) BOOL;
-
-const MSG = user32.MSG;
-
-const ATOM = c_ushort;
-
-const CS_OWNDC = 0x0020;
-
-extern "user32" fn RegisterClassExW(arg1: *const WNDCLASSEXW) callconv(WINAPI) ATOM;
-extern "user32" fn UnregisterClassW(lpClassName: LPCWSTR, hInstance: HINSTANCE) callconv(WINAPI) BOOL;
-extern "user32" fn CreateWindowExW(
-    dwExStyle: DWORD,
-    lpClassName: LPCWSTR,
-    lpWindowName: LPCWSTR,
-    dwStyle: DWORD,
-    X: i32,
-    Y: i32,
-    nWidth: i32,
-    nHeight: i32,
-    hWindParent: ?HWND,
-    hMenu: ?HMENU,
-    hInstance: HINSTANCE,
-    lpParam: ?LPVOID,
-) callconv(WINAPI) ?HWND;
-
-extern "user32" fn SetWindowLongPtrW(hWnd: HWND, nIndex: c_int, dwNewLong: LONG_PTR) callconv(WINAPI) LONG_PTR;
-extern "user32" fn GetWindowLongPtrW(hWnd: HWND, nIndex: c_int) callconv(WINAPI) LONG_PTR;
-
-const WS_OVERLAPPED = 0;
-const WS_CAPTION = 0x00C00000;
-const WS_SYSMENU = 0x00080000;
-const WS_VISIBLE = 0x10000000;
-
 fn windowProc(win: HWND, msg: UINT, wparam: WPARAM, lparam: LPARAM) callconv(WINAPI) LRESULT {
     const fail_result = @intToPtr(LRESULT, 1);
     return switch (msg) {
@@ -232,9 +248,13 @@ fn windowProc(win: HWND, msg: UINT, wparam: WPARAM, lparam: LPARAM) callconv(WIN
             window.addEvent(.{ .CloseRequest = {} }) catch return @intToPtr(LRESULT, 1);
             return null;
         },
+
         user32.WM_CREATE => {
             const createstruct = @ptrCast(*CREATESTRUCTW, @alignCast(@alignOf(*CREATESTRUCTW), lparam));
-            const wcs = @ptrCast(*WindowCreationStuff, @alignCast(@alignOf(WindowCreationStuff), createstruct.lpCreateParams));
+            const wcs = @ptrCast(*WindowCreationInfo, @alignCast(
+                @alignOf(WindowCreationInfo),
+                createstruct.lpCreateParams,
+            ));
             _ = SetWindowLongPtrW(win, 0, @bitCast(LONG_PTR, @ptrToInt(wcs.window)));
             var client_rect = @as(RECT, undefined);
             _ = GetClientRect(win, &client_rect);
@@ -250,6 +270,7 @@ fn windowProc(win: HWND, msg: UINT, wparam: WPARAM, lparam: LPARAM) callconv(WIN
             };
             return null;
         },
+
         user32.WM_SIZE => {
             const window = @intToPtr(*Instance.Window, @bitCast(usize, GetWindowLongPtrW(win, 0)));
             const size = @ptrToInt(lparam);
@@ -287,13 +308,10 @@ fn windowProc(win: HWND, msg: UINT, wparam: WPARAM, lparam: LPARAM) callconv(WIN
             _ = EndPaint(win, &ps);
             return null;
         },
+
         else => DefWindowProcW(win, msg, wparam, lparam),
     };
 }
-
-extern "user32" fn ValidateRect(hWnd: HWND, lpRect: *const RECT) callconv(WINAPI) BOOL;
-extern "user32" fn BeginPaint(hWnd: HWND, lpPaint: *PAINTSTRUCT) callconv(WINAPI) HDC;
-extern "user32" fn EndPaint(hWnd: HWND, lpPaint: *PAINTSTRUCT) callconv(WINAPI) BOOL;
 
 fn messageWindowProc(win: HWND, msg: UINT, wparam: WPARAM, lparam: LPARAM) callconv(WINAPI) LRESULT {
     return switch (msg) {
@@ -328,7 +346,11 @@ const CREATESTRUCTW = extern struct {
     dwExStyle: DWORD,
 };
 
-const WindowCreationStuff = struct { allocator: *Allocator, window: *Instance.Window };
+const WindowCreationInfo = struct {
+    allocator: *Allocator,
+    window: *Instance.Window,
+};
+
 fn messageLoop(
     allocator: *Allocator,
     message_wnd: HWND,
@@ -338,11 +360,14 @@ fn messageLoop(
     var message = @as(MSG, undefined);
     while (GetMessageW(&message, null, 0, 0) > 0) {
         switch (message.message) {
-            message_loop_terminate => return,
+            message_loop_terminate => return, // WE DONE
+
             message_loop_show_window => {
                 _ = user32.ShowWindow(message.hWnd, @bitCast(i32, @intCast(u32, message.wParam)));
             },
+
             message_loop_create_window => {
+                // Unwrap the pipe we got sent in the lparam of the message
                 const window_create_pipe = @ptrCast(*WindowCreatePipe, @alignCast(@alignOf(*WindowCreatePipe), message.lParam));
                 defer window_create_pipe.reset_event.set();
 
@@ -351,13 +376,15 @@ fn messageLoop(
 
                 const window = allocator.create(Instance.Window) catch continue;
                 var window_rect = RECT{ .left = 0, .right = window_create_pipe.in_width, .top = 0, .bottom = window_create_pipe.in_height };
-                _ = AdjustWindowRectEx(&window_rect, WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, 0, 0);
-                var wcs = WindowCreationStuff{ .allocator = allocator, .window = window };
+                const base_style = @as(DWORD, WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU);
+                const window_style = base_style | (if (window_create_pipe.in_flags.resizable) @as(DWORD, WS_THICKFRAME) else 0);
+                _ = AdjustWindowRectEx(&window_rect, window_style, 0, 0);
+                var wcs = WindowCreationInfo{ .allocator = allocator, .window = window };
                 if (CreateWindowExW(
                     0,
                     reg_win_class_name,
                     name,
-                    WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
+                    window_style,
                     window_create_pipe.in_x orelse CW_USEDEFAULT,
                     window_create_pipe.in_y orelse CW_USEDEFAULT,
                     window_rect.right - window_rect.left,
@@ -367,10 +394,10 @@ fn messageLoop(
                     hinstance,
                     &wcs,
                 )) |_| {
-                    var client_rect = @as(RECT, undefined);
                     window_create_pipe.out_win = window;
                 }
             },
+
             else => {
                 _ = user32.TranslateMessage(&message);
                 _ = DispatchMessageW(&message);
@@ -379,25 +406,27 @@ fn messageLoop(
     }
     return error.EarlyExit;
 }
+
 fn messageThread(input_info: MessageThreadInputInfo) !void {
     const allocator = input_info.allocator;
     const canon_name = std.unicode.utf8ToUtf16LeWithNull(allocator, input_info.instance_name) catch |err| {
         input_info.message_window_ready.set();
         return err;
     };
-
     defer allocator.free(canon_name);
+
     const fake_name = std.mem.concat(allocator, u8, &[_][]const u8{ input_info.instance_name, "messagewindow" }) catch |err| {
         input_info.message_window_ready.set();
         return err;
     };
-
     defer allocator.free(fake_name);
+
     const message_windowclass_name = std.unicode.utf8ToUtf16LeWithNull(allocator, fake_name) catch |err| {
         input_info.message_window_ready.set();
         return err;
     };
     defer allocator.free(message_windowclass_name);
+
     const hinstance = @ptrCast(HINSTANCE, kernel32.GetModuleHandleW(null));
     const wndclass = WNDCLASSEXW{
         .style = CS_OWNDC,
@@ -432,7 +461,6 @@ fn messageThread(input_info: MessageThreadInputInfo) !void {
         std.log.err("{}", .{kernel32.GetLastError()});
         return error.OsError;
     }
-
     defer _ = UnregisterClassW(wndclass.lpszClassName, wndclass.hInstance);
 
     if (RegisterClassExW(&message_wndclass) == 0) {
@@ -475,7 +503,9 @@ pub const Instance = struct {
     allocator: *std.mem.Allocator,
     message_thread: *std.Thread,
     message_window: HWND,
+
     pub fn init(allocator: *std.mem.Allocator, their_instance_name: []const u8) !@This() {
+        // We don't want to take ownership but we need this
         const instance_name = try allocator.dupe(u8, their_instance_name);
         errdefer allocator.free(instance_name);
 
@@ -484,6 +514,8 @@ pub const Instance = struct {
         try message_thread_ready.init();
         defer message_thread_ready.deinit();
 
+        // Spawn a thread that will spin on the windows message queue
+        // and make windows for us
         const message_thread = try std.Thread.spawn(
             MessageThreadInputInfo{
                 .message_window_ready = &message_thread_ready,
@@ -544,7 +576,7 @@ pub const Instance = struct {
         };
 
         const EventQueue = std.atomic.Queue(Event);
-        pub fn deinit(self: *@This()) void {
+        pub fn close(self: *@This()) void {
             _ = DestroyWindow(self.hwnd);
             const allocator = self.allocator;
             allocator.destroy(self);
@@ -622,6 +654,8 @@ pub const Instance = struct {
                 },
             };
 
+            // TODO: we don't actually want a stretch? What the fuck
+            // else do we call
             if (StretchDIBits(
                 self.hdc,
                 @intCast(c_int, dest_x),
@@ -632,13 +666,25 @@ pub const Instance = struct {
                 @intCast(c_int, bitmap.y_offset),
                 @intCast(c_int, bitmap.width),
                 @intCast(c_int, bitmap.height),
+                bitmap.pixels.ptr,
+                @ptrCast(*const BITMAPINFO, &bitmapinfo),
+                0,
+                0x00CC0020,
             ) == 0 and bitmap.height != 0) {
                 return error.BlitError;
             }
         }
     };
 
-    pub fn createWindow(self: *@This(), title: []const u8, width: i32, height: i32, x: ?i32, y: ?i32) !*Window {
+    pub fn createWindow(
+        self: *@This(),
+        title: []const u8,
+        width: i32,
+        height: i32,
+        x: ?i32,
+        y: ?i32,
+        create_flags: WindowCreateFlags,
+    ) !*Window {
         const allocator = self.allocator;
 
         var window_create_pipe = WindowCreatePipe{
@@ -647,10 +693,11 @@ pub const Instance = struct {
             .in_height = height,
             .in_x = x,
             .in_y = y,
+            .in_flags = create_flags,
             .reset_event = @as(std.ResetEvent, undefined),
         };
-
         try window_create_pipe.reset_event.init();
+
         _ = PostMessageW(self.message_window, message_loop_create_window, 0, &window_create_pipe);
         window_create_pipe.reset_event.wait();
         if (window_create_pipe.out_win) |window| {
@@ -731,13 +778,6 @@ pub fn log(
 
     _ = writer.print(level_txt ++ prefix2 ++ format ++ "\n", args) catch {};
 }
-
-extern "user32" fn MessageBoxW(
-    hWnd: ?HWND,
-    lpText: LPCWSTR,
-    lpCaption: LPCWSTR,
-    uType: UINT,
-) callconv(WINAPI) c_int;
 
 const MB_ICONEXCLAMATION = 0x00000030;
 
