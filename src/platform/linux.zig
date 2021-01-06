@@ -76,7 +76,8 @@ fn getSdlError() [*c]u8 {
     } else {
         var held = @"im a static :)".lock.acquire();
         const cstr = sdl.SDL_GetError();
-        @memcpy(&@"im a static :)".buffer, cstr, 1024);
+        const bah = std.mem.span(cstr);
+        std.mem.copy(u8, @"im a static :)".buffer[0..], bah);
         held.release();
     }
     return &@"im a static :)".buffer;
@@ -104,7 +105,7 @@ pub const Instance = struct {
             .windows = std.ArrayList(*Window).init(allocator),
         };
     }
-    pub fn pump(self: *@This()) void {
+    pub fn pump(self: *@This()) !void {
         // todo: whenever the event queue is empty, move SDL events to it.
         if (std.Thread.getCurrentId() != self.thread)
             @panic("Gotta pump in the video thread newb.");
@@ -121,11 +122,13 @@ pub const Instance = struct {
                 for (evs) |ev| {
                     switch (ev.type) {
                         sdl.SDL_WINDOWEVENT => std.log.info("hi {}\n", .{ev.window}),
+                        sdl.SDL_QUIT => try self.windows.items[0].addEvent(.CloseRequest),
                         else => {},
                     }
                 }
             }
         }
+        return;
     }
 
     pub fn createWindow(

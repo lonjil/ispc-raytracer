@@ -44,7 +44,7 @@ pub fn main() void {
     var running = true;
 
     while (running) {
-        daedelus_instance.pump();
+        daedelus_instance.pump() catch {};
         if (window.pollEvent()) |ev| {
             switch (ev) {
                 .CloseRequest => |_| {
